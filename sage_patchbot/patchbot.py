@@ -618,9 +618,12 @@ class Patchbot(object):
 
         # override the default by the json config file
         if self.options.config is not None:
-            with open(self.options.config) as f:
-                for key, value in json.load(f).items():
-                    conf[str(key)] = value
+            try:
+                with open(self.options.config) as f:
+                    for key, value in json.load(f).items():
+                        conf[str(key)] = value
+            except Exception as msg:
+                raise ValueError("not able to read the configuration file {}. Failed with error\n{}".format(self.options.config, msg))
 
         # complete back the default bonus if needed
         for key, value in self.default_bonus.items():
