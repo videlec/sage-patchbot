@@ -1445,6 +1445,14 @@ class Patchbot(object):
 
 _received_sigusr1 = False
 
+def test_base_and_exit_on_failure(patchbot):
+    res = patchbot.test_a_ticket(0)
+    if res not in ('TestsPassed', 'TestsPassedOnRetry', 'PluginOnly'):
+        print("\n\n")
+        print("Current base: {} {}".format(patchbot.config['base_repo'],
+                                           patchbot.config['base_branch']))
+        print("Failing tests in your base install: exiting.")
+        sys.exit(1)
 
 def main(args=None):
     """
@@ -1571,15 +1579,14 @@ def main(args=None):
                     report['status'].startswith('TestsPassed'))
 
         if patchbot.config['plugin_only'] or not any(good(report) for report in patchbot.current_reports(0)):
-            res = patchbot.test_a_ticket(0)
-            if res not in ('TestsPassed', 'TestsPassedOnRetry', 'PluginOnly'):
-                print("\n\n")
-                print("Current base: {} {}".format(patchbot.config['base_repo'],
-                                                   patchbot.config['base_branch']))
-                print("Failing tests in your base install: exiting.")
-                sys.exit(1)
+            test_base_and_exit_on_failure(patchbot)
 
     for k in range(count):
+        if not check_time_of_day(patchbot.config['time_of_day']):
+            patchbot.write_log("Idle.", [LOG_MAIN, LOG_MAIN_SHORT])
+            patchbot.idle()
+            continue
+
         if patchbot.config['cleanup']:
             for path in glob.glob(os.path.join(tempfile.gettempdir(),
                                                "*%s*" % temp_build_suffix)):
@@ -1590,19 +1597,18 @@ def main(args=None):
         if _received_sigusr1:
             break
 
+        patchbot.reload_config()
+
+        if not patchbot.check_base():
+            test_base_and_exit_on_failure(patchbot)
+            continue
+
+        ticket = None
+        if tickets:
+            ticket = tickets.pop(0)
+
         try:
-            if tickets:
-                ticket = tickets.pop(0)
-            else:
-                ticket = None
-            patchbot.reload_config()
-            if check_time_of_day(patchbot.config['time_of_day']):
-                if not patchbot.check_base():
-                    patchbot.test_a_ticket(0)
-                patchbot.test_a_ticket(ticket)
-            else:
-                patchbot.write_log("Idle.", [LOG_MAIN, LOG_MAIN_SHORT])
-                patchbot.idle()
+            patchbot.test_a_ticket(ticket)
         except Exception:
             traceback.print_exc()
             patchbot.idle()
